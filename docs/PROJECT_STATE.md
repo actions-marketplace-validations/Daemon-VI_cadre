@@ -1,6 +1,6 @@
 # Cadre — Project State
 
-_Last updated: 2026-09-19 (1.2.0 released — ships M13; `v1` on 1.2.0. M14 memory across runs done on `main`, unreleased; next: M15, web research tool)_
+_Last updated: 2026-09-21 (**1.3.0 released** — ships M14, memory across runs; `v1` moved to 1.3.0; the **VS Code extension is published** as `daemon-vi.cadre-ai`, and **extension 1.4.0**, published 2026-09-21 to both registries, adds five panels. **v1 is feature-complete; the project is in maintenance.** M13.1/M15/M16 are designed, not started.)_
 
 ## What this is
 A self-hosted platform that runs an organisation of AI agents — builders, reviewers, verifiers,
@@ -13,11 +13,125 @@ their API keys, at organisation scale — agents as workers, some building, some
 some verifying, some deciding". The refined statement and the three design drivers are in
 `SRS.md` §1.
 
-## Status: 1.2.0 released (M13); M14 (memory across runs) done on `main`, unreleased
+## Status: 1.3.0 released (M14 shipped); `v1` on 1.3.0; v1 feature-complete, in maintenance
 _One release for the engine (v1.0 programme, M5–M11) and distribution (D0–D3, D5; the VS Code
-extension, D4, is built but not published); see "1.0.0 release" below. The v0.1.0 section that follows is the offline record of 2026-09-16 and is kept as history._
+extension, D4, published 2026-09-20); see "1.0.0 release" below. The v0.1.0 section that follows is the offline record of 2026-09-16 and is kept as history._
 
-## M14 — memory across runs — DONE on `main`, 2026-09-19 (`PROMPT_M14.md` §6, FR-24, ADR-036)
+## 1.3.0 release (2026-09-20, `PROMPT_1_3_0.md` §1)
+
+Ships M14 (memory across runs). Tag `v1.3.0` = commit `8fd0e10`; all 8 release jobs green.
+
+**Migration proven on a real 1.2.0 install before tagging.** In a fresh `CADRE_HOME`, 1.2.0 made
+two `decision-board --demo` runs and real M13 data (user `alice`, team `eng` with her as a member,
+budget 5 runs/day + 2 concurrent, allowance `groq`). It wrote **schema v4** with **no**
+`usage.memory_tokens` column. The `main` build then opened the same home: `PRAGMA user_version` =
+**5**, `usage.memory_tokens` present, both runs still listed with **51 events each**, the team, its
+budget and its allowance all intact, and `cadre memory list` returned "No memory yet." on a store
+with no memory files.
+
+**Channels verified.** PyPI (after the usual index/JSON lag, from a clean cache):
+`uvx --from cadre-ai==1.3.0 cadre --version` = `cadre 1.3.0`, a `decision-board --demo` run
+succeeded, and `cadre memory add/list` worked on a fresh install. **SHA-256 match** PyPI ↔ GitHub
+Release: wheel `60ef1e46…`, sdist `bf0a8aa3…`. **Windows build** downloaded and run → `cadre 1.3.0`.
+**GHCR**: the release `container image` job (build + smoke test + push) succeeded; Docker is not
+run on this laptop, so that job is the evidence.
+
+**`v1` moved to 1.3.0.** Verified first: the demo workflow was pinned to `Daemon-VI/cadre@v1.3.0`,
+issue #12 on `cadre-action-demo` triggered a run that succeeded and opened **PR #13** — one-line
+title, body ending `Closes #12`, a one-line docstring diff, its `pytest` check green. Then `v1`
+(annotated) was force-pushed to `8fd0e10` (`refs/tags/v1^{}` confirms), the workflow was set back
+to `@v1`, and the Marketplace page lists `v1.3.0`. Issue #12 and PR #13 closed; the fixture's
+`main` is unchanged (`tests/__init__.py` still 0 bytes).
+
+**Security advisory.** A **private draft** now exists for the MCP `allow_exec` bypass:
+[GHSA-3cxq-9h5r-3ccw](https://github.com/Daemon-VI/cadre/security/advisories/GHSA-3cxq-9h5r-3ccw).
+GitHub scored the suggested vector at **4.7 / Medium**, not the "Low, 4.2" the draft file used to
+claim; the file now says so. Reviewing, requesting a CVE and pressing Publish are Rithik's acts.
+
+## VS Code extension 1.4.0 — five panels (2026-09-21)
+
+Rithik asked for "a UI in VS Code" and then for all five candidate panels, shipped as 1.4.0. Each
+is an editor tab opened from the Command Palette or the Runs view's title bar: **New run…** (one
+form: org, goal, folder or none, demo, private, with Forecast), **Usage** (per-model meters against
+today's caps + a 1/7/14/30-day ledger), **Approvals** (everything waiting; Decide… only),
+**Memory** (M14 facts by scope: add, delete, decide proposals) and **Organisations** (agents,
+tools, checks, budget; edit your own org's YAML, view a template's read-only).
+
+**Published 2026-09-21** from the `vscode-v1.4.0` tag on `f8cf4ce`, run `35561751673`:
+`Packaged: cadre.vsix (13 files, 43.16 KB)`, `Published daemon-vi.cadre-ai v1.4.0` (Marketplace)
+and `🚀 Published daemon-vi.cadre-ai v1.4.0` (Open VSX); both registries' APIs then reported
+1.4.0 as the current version. The `.vsix` downloaded back from Open VSX declares 1.4.0 and its
+`panels.js` contains the audit fixes below.
+
+**How it is built.** One more webview bundle (`dist/webview/panels.js`, 12.55 KB minified) serves
+all five, told which it is by the first posted view. The extension host does every API call
+(`panels.ts`) and posts plain view models built by pure functions (`panelModels.ts`); the webview
+renders them with `textContent` only. The security properties of the run view carry over and are
+tested: the token never reaches a webview; everything a panel may post is one of a fixed list of
+shapes (`protocol.isPanelMessage`) **and** one its own kind uses (`PANEL_ALLOWS`); a run is started
+on a workspace folder **by index**, never by a path the page sends; and **no panel can approve
+anything** — Decide… calls the same `Approvals.offerById` as the run view, so running code still
+needs the modal's explicit "Allow execution", and the form has no `allow_exec`. Usage meters use
+the status bar's thresholds (80% warn, 95% hot) and state their severity in words, never colour
+alone. The client gained `usage`, `org`, `memory`, `addMemory`, `removeMemory` and a `private`
+option; `commands.launchRun` now serves both the palette and the form.
+
+**Evidence.** Unit tests 72 → **104** (the protocol validator and per-kind allow-list; every view
+model; the new client calls against the fake loopback server, including that `private` becomes
+`privacy: private` while `allow_exec` still never goes; and `panels-dom.test.ts`, which runs the
+**built** bundle in a sandbox whose DOM throws on `innerHTML` and checks every button posts only an
+admitted message). eslint and both typechecks clean. An integration test opens each panel in real
+VS Code (CI, under xvfb): its first run (`35560849183`) failed because the workbench's tab model
+updates a moment after `createWebviewPanel` returns, so the test now polls for the tab for up to
+5 s (`999e7bc`); it passed 5/5 in run `35561002667` and again in the publish run. **Rendered with
+real data** (the bundle as of the stale-proposal fix; the audit fixes below came after and are
+covered by the unit and DOM tests, not re-rendered): `cadre serve` on the
+M14 measurement home → the compiled client → the compiled view models → the built bundle in
+headless Edge with VS Code Dark+ and Light+ theme variables: 10 models, 3 ledger rows, 2 pending
+approvals, 6 orgs, 7 memory entries. A synthetic 40/85/97% view checked the meter fills and state
+words. **Not verified:** the panels inside a real VS Code window *with a live server* — the
+integration test opens them in VS Code without one, and the rendering was Chromium with the same
+bundle, CSS and theme tokens, not VS Code's own webview host.
+
+**Found by rendering real data, and fixed.** Memory showed 5 proposals but only 2 pending
+approvals: three were orphans whose approvals had been cancelled before 1.3.0's fix, so Decide…
+could only say "already decided" and nothing could remove them. The memory panel now cross-checks
+proposals against the pending approvals; a stale one is labelled, explained and deletable. (The
+same can happen to anyone who resets `cadre.sqlite` while the memory files survive.) Also found:
+`/quota` caps keep back the provider reserve (a 1,000-request cap reads 900) while the ledger's
+share is of the full cap — the Usage panel now says so. Groq's rolling day reports "resets in ~24h"
+in `/quota`; that number comes from the engine and was not investigated.
+
+**Audited before publishing, and fixed (`f8cf4ce`).** The audit found no overstated security
+claim. It did find: the Usage panel stopped refreshing itself after one tick with the server down
+(it now reschedules until the server is back, and stops when the panel closes); the New run form's
+folder was kept by position, so adding a workspace folder could silently move a run to a different
+one (it now follows the chosen folder by name, keeps "no folder", and falls back to none when the
+workspace is untrusted); a forecast's text repeated its "Forecast:" heading; an unused `items`
+getter in `approvals.ts`; and README/CHANGELOG/site wording and test counts that had drifted.
+
+## VS Code extension published (2026-09-20, D4, FR-19)
+
+Published to **both** registries from the `vscode-v1.3.0` tag, run `35515512773`:
+`🚀 Published daemon-vi.cadre-ai v1.3.0` (Open VSX) and the Marketplace query returns
+`daemon-vi.cadre-ai | Cadre AI | v1.3.0`. Install with `ext install daemon-vi.cadre-ai`, or search
+**Cadre AI**. Open VSX took ~2 minutes to index after the upload reported success.
+
+**It is `cadre-ai`, not `cadre`.** The Marketplace enforces **globally unique** `name` *and*
+`displayName` — they are not namespaced by publisher, unlike npm. Both `cadre` and `Cadre` are
+owned by an unrelated publisher (`Cadre.cadre`), so the first two publish attempts failed with
+"The extension 'cadre' already exists" and then "This extension display name is taken". The
+extension now ships as `name: cadre-ai` / `displayName: "Cadre AI"`, matching the PyPI
+distribution; `tests/unit/manifest.test.ts` pins both so it cannot regress. Nothing was published
+on the failed attempts (the Open VSX step runs after the Marketplace step and was skipped), so the
+`vscode-v1.3.0` tag was moved twice while it had published nothing.
+
+The extension version tracks the engine, so it starts at **1.3.0** rather than 0.1.0, and it now
+carries the Cadre logo as its icon (`media/icon.png`, rasterised from `site/assets/logo.svg`).
+The `vscode-marketplace` environment was created by this first run and has **no protection rules
+and no branch policy**.
+
+## M14 — memory across runs — DONE 2026-09-19, released in 1.3.0 (`PROMPT_M14.md` §6, FR-24, ADR-036)
 
 Small Markdown knowledge files under `CADRE_HOME/memory/` (`global.md`, `teams/<team>.md`,
 `projects/<root-commit>.md`), injected into **builders and managers only** under a hard per-call
@@ -265,7 +379,7 @@ re-run on the same tag after Rithik fixed each site's pending publisher: TestPyP
 | GitHub Action | `v1` → 18e4aec (1.0.1) | `uses: Daemon-VI/cadre@v1` | since 1.0.1: issue #6 → PR #7, one-line title, body ends `Closes #6`. Before: `cadre-action-demo` switched to `@v1`; issue #4 (labelled) → run `20260919-101549-2299e0` succeeded → PR #5 (+1 line, a docstring; 19 calls, 33,835 + 1,554 tokens; reviewer used Qwen and gpt-oss) |
 | TestPyPI | 1.0.1 | test.pypi.org/project/cadre-ai | 1.0.1: first attempt, same SHA-256 as PyPI. 1.0.0: fourth attempt at the job, after Rithik corrected the pending publisher (the first three: `invalid-publisher`). Both files' SHA-256 match the GitHub Release (`6c7f593f…` wheel, `fcbb4de9…` sdist) |
 | **PyPI** | **1.0.1** | pypi.org/project/cadre-ai | 1.0.1: first attempt; clean-cache `uvx --from cadre-ai@1.0.1` → `cadre 1.0.1`, demo run succeeded. 1.0.0: second attempt, after Rithik corrected the pypi.org publisher (the first: `invalid-publisher` for environment `pypi`; nothing uploaded). Same SHA-256 as above. From a clean uv cache and a new `CADRE_HOME`: `uvx --from cadre-ai cadre --version` → `cadre 1.0.0`, a `decision-board --demo` run succeeded, and `uvx cadre-ai --version` works too. `pipx` is not installed here, so `pipx install` was not tried |
-| VS Code Marketplace / Open VSX | — | — | not published: `VSCE_PAT` and `OVSX_PAT` are not set (`gh secret list` empty on 2026-09-19, and no `vscode-marketplace` environment) |
+| VS Code Marketplace / Open VSX | 1.3.0 | `daemon-vi.cadre-ai` | **published 2026-09-20** to both, from the `vscode-v1.3.0` tag; see "VS Code extension published" |
 | GitHub Marketplace | v1.0.1 | github.com/marketplace/actions/cadre-finish-this-project | listed by Rithik on the 1.0.0 release page (2026-09-19); on 2026-09-19 the page showed "v1.0.1 Latest" with no further action |
 
 ### Seen on screen for the first time (2026-09-19)
@@ -467,7 +581,7 @@ No other account's name, no email address, and no key appears anywhere.
 | **D1** packages | **published 1.0.0** (2026-09-19; see "Published channels") | Published wheel `cadre_ai-1.0.0-py3-none-any.whl`, 146,808 bytes (earlier, on 2026-09-18, `tools/wheel_smoke.py` checked the 0.1.0 wheel in a clean venv: `cadre` and `cadre-ai` both work, and the demo run succeeded). `release.yml`: TestPyPI → PyPI by trusted publishing, three-OS PyInstaller builds with a smoke test, and a GHCR image smoke-tested for uid 10001 and a demo run |
 | **D2** MCP | **verified from PyPI** in Claude Code 2.1.278 and VS Code 1.138's MCP client (2026-09-19; see "Published channels"). Before that: | Six MCP tests. Real stdio (`tools/mcp_smoke.py`): five tools, auto-started server, token in no result. **Claude Code 2.1.276** called `cadre_list_orgs`, `cadre_forecast` and `cadre_usage` from a fixture repo. **Found:** on Windows, the SDK client and Claude Code put stdio servers in a kill-on-close job object, so an auto-started `cadre serve` dies with the session. Breakaway is refused, and escaping via WMI was rejected as evasion-like. The start-run result now says so and points to `cadre resume` (ADR-027) |
 | **D3** Action | **verified 2026-09-19** | See "D3 on a real repository" below. Built: `action.yml` (composite; engine from the action's own source), `examples/github-action/cadre.yml` (OWNER, MEMBER or COLLABORATOR only; contents, pull-requests and issues write), `provider add-from-env`, `run --result-json`; test of the PR body, parked comment and trigger rules. Real runs: PRs #2, #3 and (through `@v1`) #5 on `cadre-action-demo` |
-| **D4** VS Code extension | **seen on screen 2026-09-19**, not published | `editors/vscode`: no runtime dependencies. `tsc` and `eslint` clean (eslint bans innerHTML and similar), 72 of 72 unit tests (70 on 2026-09-18), `.vsix` 28.54 KB. **The integration suite passed 4 of 4 inside the installed VS Code** (isolated profile, via `CADRE_VSCODE_EXE`). The `.vsix` installed into his VS Code as `daemon-vi.cadre@0.1.0` and was uninstalled again. The agent's live API smoke test: demo run streamed, dirty tree refused, 7 exec approvals rejected, review-branch diff listed 3 files. On screen on 2026-09-19 (see "1.0.0 release"): Forecast, Start run, the live run view, the approval notification and Review branch's diff. The Runs tree itself was not looked at. Not published |
+| **D4** VS Code extension | **published 2026-09-20** as `daemon-vi.cadre-ai` (1.3.0); **1.4.0 (2026-09-21) adds five panels** | `editors/vscode`: no runtime dependencies. `tsc` and `eslint` clean (eslint bans innerHTML and similar), 72 of 72 unit tests (70 on 2026-09-18), `.vsix` 28.54 KB. **The integration suite passed 4 of 4 inside the installed VS Code** (isolated profile, via `CADRE_VSCODE_EXE`). The `.vsix` installed into his VS Code as `daemon-vi.cadre@0.1.0` and was uninstalled again. The agent's live API smoke test: demo run streamed, dirty tree refused, 7 exec approvals rejected, review-branch diff listed 3 files. On screen on 2026-09-19 (see "1.0.0 release"): Forecast, Start run, the live run view, the approval notification and Review branch's diff. The Runs tree itself was not looked at. Published 2026-09-20 (see "VS Code extension published"); panels in 1.4.0 (see "VS Code extension 1.4.0") |
 | **D5** docs site | **live** | `site/`: nine pages; `build.py` generates them with markdown-it and no framework, pulling the M5/M11 tables from this file at build time. 186 internal links resolve; all pages returned 200 locally; 137,850 bytes. The replay is run `20260917-230536-aa0587` (54 events, 14 calls, 145.76 s) and the scrub check is clean. **Live since 2026-09-19** at daemon-vi.github.io/cadre (every page returns 200) |
 | **D6** desktop | skipped | Rithik's decision, 2026-09-18 |
 | **D7** hosted | deferred | Stays behind M12 and M13 (ROADMAP) |
@@ -749,32 +863,109 @@ Kept as history: the first attempt stalled on the session's safety classifier; R
 
 Every item is met, and 1.0.0 was tagged and released on 2026-09-19 (see "1.0.0 release").
 
-## Where to pick up
-1. **Next: `ROADMAP.md` M15** — the web research tool (`fetch_url`/`search`, fetched text as data,
-   domain allow-lists, size caps). M14 (memory across runs) is done on `main`, unreleased. A **1.3.0**
-   release carrying M14 needs Rithik's yes (it is a new feature).
-2. Waiting on Rithik, each his call:
-   - **Publish the security advisory** for the MCP `allow_exec` bypass (he did NOT tick creating
-     the draft this round). Draft text is in `docs/SECURITY_ADVISORY_DRAFT.md`: affected
-     1.0.0/1.0.1, fixed 1.1.0. Create it under the repo's Security → Advisories (GHSA); publishing
-     is his act.
-   - **VS Code extension publish**: `gh secret list` shows no secrets, and the `vscode-marketplace`
-     environment the publish job uses does not exist yet. He creates the publisher `daemon-vi` on
-     the VS Code Marketplace, both tokens, and runs `gh secret set VSCE_PAT` / `gh secret set
-     OVSX_PAT` himself. Then set the extension to 1.2.0, and a `vscode-v1.2.0` tag publishes both.
-     The Open VSX namespace `daemon-vi` may need creating once (`npx ovsx create-namespace` from a
-     workflow step, never with the token on a command line).
-   - **Agent-mode MCP call in VS Code** (needs his Copilot sign-in), and **Antigravity**, which he
-     said he has but which was not found on this laptop.
-3. Known and not yet fixed: a runner's usage ledger starts empty, so the Action's "left today" is
-   always the full free limit. Containment is proven on Linux only (see "M12"). (The post-Reject
-   exec re-ask is **fixed** in 1.2.0, ADR-035.)
-4. Done, for the record: keys rotated (a new key goes in with `provider key <id>`, not `provider
-   add`); the scheduler job is installed (every 30 min; remove with `cadre scheduler uninstall`);
-   the repo is public with Pages and private vulnerability reporting; the D3 real test; the 1.0.0,
-   1.0.1, 1.1.0 and **1.2.0** releases; M12; `v1` moved to **1.2.0** (proven on the demo repo,
-   PR #11); M13 shipped in 1.2.0 (accounts + teams, all but OIDC); demo PRs #5/#7/#9/#11 closed;
-   **M14** (memory across runs) built and merged, unreleased, with a live n=1 measurement.
+## Where to pick up — a cold start
+
+_Written for someone returning after months, or arriving for the first time. Assume nothing is
+remembered. **v1 is feature-complete and in maintenance**: there is no work in progress and nothing
+is half-finished._
+
+### 1. Get it running from source (5 minutes)
+
+```bash
+git clone https://github.com/Daemon-VI/cadre && cd cadre
+uv sync                      # Python 3.12+; installs into .venv
+uv run pytest -q             # expect 284 passed, 9 skipped (see "skips" below)
+uv run ruff check src tests  # expect: All checks passed!
+uv run cadre --help
+```
+
+Nothing above needs a key or a network call. To see it work with no key at all:
+
+```bash
+uv run cadre run decision-board "Should we adopt a four-day week?" --demo
+```
+
+### 2. Add a free model key (2 minutes)
+
+```bash
+uv run cadre presets                 # which providers Cadre knows, and their free limits
+uv run cadre provider add groq       # prompts for the key, hidden; get one at console.groq.com
+uv run cadre forecast decision-board "…"   # will it fit in what's left today?
+```
+
+The key goes to the **OS credential store** (Windows Credential Manager / macOS Keychain / Secret
+Service), never to a file. `cadre provider add` will *not* overwrite a key it already finds — to
+replace a rotated key use `cadre provider key <id>`. A second provider on a different model family
+(e.g. `gemini`) is what makes reviews independent.
+
+State lives in **`~/.cadre/`** (`CADRE_HOME` overrides): `config.yaml` (providers, never keys),
+`cadre.sqlite`, `token`, `orgs/`, `memory/`, `runs/<id>/`.
+
+### 3. Where it is published
+
+| Channel | Current | Where |
+|---|---|---|
+| PyPI | **1.3.0** | `cadre-ai` — `uvx --from cadre-ai cadre` |
+| GitHub Release | **v1.3.0** | wheel, sdist and standalone builds for Windows / macOS-arm64 / Linux |
+| GHCR | **1.3.0** | `ghcr.io/daemon-vi/cadre` (non-root, state in `/data`) |
+| GitHub Action | **`v1` → 1.3.0** | Marketplace: "Cadre — finish this project" |
+| Docs site | live | daemon-vi.github.io/cadre (built from `site/` by the Docs workflow) |
+| VS Code extension | **1.3.0** | `ext install daemon-vi.cadre-ai` — [Marketplace](https://marketplace.visualstudio.com/items?itemName=daemon-vi.cadre-ai) and [Open VSX](https://open-vsx.org/extension/daemon-vi/cadre-ai) |
+
+Releasing is one thing: bump the version in `pyproject.toml` **and** `src/cadre/__init__.py`, add a
+dated `CHANGELOG.md` entry, commit, then push a `vX.Y.Z` tag — `release.yml` does the rest. **PyPI
+never accepts the same version twice, and a published `vX.Y.Z` tag is never moved or re-pushed.**
+The moving `v1` tag (the Action's) *is* force-moved, but only after a demo-repo run on the new
+version passes, and only on Rithik's explicit yes.
+
+### 4. Read these, in this order
+
+`README.md` (what it is and what it isn't) → `docs/DEMO.md` (a three-minute walkthrough with real
+output) → this file → `docs/SRS.md` (requirements FR-1…FR-24) → `docs/ARCHITECTURE.md` (ADR-001…036,
+the reasoning) → `docs/ROADMAP.md` (what is done and what was deliberately not built).
+
+### 5. Known and not fixed
+
+- **The GitHub Action's "left today" figure is wrong.** A fresh runner's usage ledger starts empty,
+  so it always reports the full free daily limit. *Fix would go in* `action.yml`'s forecast step —
+  either label the figure "this runner only", or carry the ledger between runs (cache/artifact).
+- **Containment is proven on Linux only.** The `containment` CI job runs real Docker and Podman on
+  Ubuntu; Windows and macOS are untested, and Docker Desktop adds a VM whose behaviour differs.
+  *Fix would go in* `.github/workflows/ci.yml` — a second containment job on a runner with a
+  container runtime, or an explicit "Linux only" note kept in `ADR-031`.
+- **9 tests skip locally**, mostly containment (no container runtime here) and one planted-`.git`
+  case this Windows git does not honour; they run on Linux CI. Not a bug — but if you are counting
+  tests, that is why the local and CI totals differ.
+
+Deliberate limits, not bugs (see ADR-034, ADR-036): run **reads are not scoped by team**; **team
+budgets are checked when a run starts**, not per model call; **memory across runs showed no
+measured benefit** on the one task it was tried on (n = 1) and costs ~94 tokens per model call.
+
+### 6. Waiting on Rithik — nobody else can do these
+
+- **Publish the security advisory.** The private draft exists:
+  [GHSA-3cxq-9h5r-3ccw](https://github.com/Daemon-VI/cadre/security/advisories/GHSA-3cxq-9h5r-3ccw).
+  Review it, then press Publish (and request a CVE if wanted). Afterwards the GHSA link goes into
+  `SECURITY.md` and the 1.1.0 entry in `CHANGELOG.md`.
+- **Agent-mode MCP call in VS Code** (needs his Copilot sign-in), and **Antigravity**, which he says
+  he has but which was not found on this laptop.
+
+### 7. If you are picking the work back up
+
+Nothing is scheduled. The three designed-but-unstarted milestones, in the order that makes sense:
+**M13.1 OIDC SSO** (needs a real identity provider; a prerequisite of hosting), **M15 web research
+tool** (`fetch_url`/`search` with fetched text treated strictly as data, domain allow-lists, size
+caps), then **M16 hosted deployment**. Each would get its own prompt file, as every milestone here
+has. Before shipping anything security-shaped, run the `claim-auditor` agent over the docs — it has
+caught two real holes and one bad number in this project.
+
+### 8. Done, for the record
+
+Keys rotated (a new key goes in with `provider key <id>`, not `provider add`); the scheduler job is
+installed (every 30 min; remove with `cadre scheduler uninstall`); the repo is public with Pages and
+private vulnerability reporting; the D3 real test on `cadre-action-demo`; releases **1.0.0, 1.0.1,
+1.1.0, 1.2.0 and 1.3.0**; M12 (containers), M13 (accounts + teams, all but OIDC), M14 (memory);
+`v1` moved to **1.3.0** (proven on demo PR #13); demo PRs #5/#7/#9/#11/#13 closed.
 
 ## Environment
 `cd cadre`, `uv sync`, `uv run pytest -q`. State in `~/.cadre` (`CADRE_HOME`

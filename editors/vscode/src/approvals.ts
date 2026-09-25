@@ -78,7 +78,8 @@ export class Approvals implements vscode.Disposable {
     }
     const chosen = items.length === 1 ? items[0] : (await vscode.window.showQuickPick(
       items.map((a) => ({
-        label: `${a.kind === "exec" ? "$(terminal) run code" : a.kind === "question" ? "$(question) question" : "$(pass) gate"}`,
+        label: `${a.kind === "exec" ? "$(terminal) run code" : a.kind === "question" ? "$(question) question"
+          : a.kind === "memory" ? "$(book) memory" : "$(pass) gate"}`,
         description: `run ${a.run_id}${a.agent ? ` · ${a.agent}` : ""}`,
         detail: notificationText(a.prompt, 200),
         approval: a,
@@ -138,8 +139,11 @@ export class Approvals implements vscode.Disposable {
 
   private async offerGate(a: Approval): Promise<void> {
     const who = a.agent ? ` · ${a.agent}` : "";
+    const what = a.kind === "memory"
+      ? "remember this fact for later runs? (it is replayed to builders and managers as data)"
+      : "approval needed";
     const pick = await vscode.window.showInformationMessage(
-      `Cadre run ${a.run_id}${who} — approval needed: ${notificationText(a.prompt)}`,
+      `Cadre run ${a.run_id}${who} — ${what}: ${notificationText(a.prompt)}`,
       "Approve", "Reject", "Open run");
     if (pick === "Approve") await this.decide(a, true, "");
     else if (pick === "Reject") await this.decide(a, false, "");

@@ -28,13 +28,14 @@ offline scripted team.
 
 ## Measured, not claimed
 
-Every number here was observed on free Groq and Google AI Studio keys on 2026-09-17/18 and is
+Every number here except the token-cost comparison was observed on free Groq and Google AI Studio
+keys on 2026-09-17/18 (the comparison is Cadre's own estimator, measured offline) and each is
 recorded with its run id in [`docs/PROJECT_STATE.md`](https://github.com/Daemon-VI/cadre/blob/main/docs/PROJECT_STATE.md) (the M5 and M11
 tables).
 
 | What | Result |
 |---|---|
-| `decision-board` (a five-member council votes, then a memo is written) | succeeded · 15 calls · 21.5k tokens · 125 s |
+| `decision-board` (a four-member council votes, the CEO chairs and writes the memo) | succeeded · 15 calls · 21.5k tokens · 125 s |
 | `software-team --allow-exec` (spec → build → independent review → tests gate) | succeeded · 27 calls · 94.0k tokens · 466 s |
 | `project-finisher` on a half-built fixture repository | succeeded · 14 calls · 16.8k tokens · 123 s · owner's tree unchanged |
 | Capstone 1: build a unit-converter CLI | succeeded · `Ran 9 tests … OK` when re-run by hand |
@@ -52,12 +53,26 @@ tables).
   kernel and the workspace stays writable: see ADR-031 for what that does not protect. Don't give
   an untrusted goal to an org whose checks run as you, or, in project mode, to one whose checks
   run in a container.
+- **Containment is proven on Linux only.** The container runner is tested against real Docker *and*
+  Podman in Linux CI (no network, no writes outside `/work`, no planted key, no fork bomb, no
+  memory overrun, timeout killed). Windows and macOS are untested, and Docker Desktop puts a VM in
+  between whose behaviour differs.
+- **Memory across runs did not help on the one task it was measured on.** n = 1: the model got the
+  convention right first try with and without memory, so it saved no repair turns, and it costs
+  about 94 tokens per model call. It may help on harder conventions; that is untested.
+- **The GitHub Action's "left today" figure is wrong.** A runner's usage ledger starts empty, so it
+  always reports the full free daily limit rather than what your key has actually spent.
+- **Run *reads* are not scoped by team.** Any signed-in user can read any run; only the
+  side-effecting actions — cancel, resume, decide approvals — and starting a run are team-scoped
+  (ADR-034). Runs carry no secrets, so this is a deliberate trade, but it is not isolation.
 - **No run has parked live yet.** Parking on a daily limit and resuming after the reset is
   verified with a fake clock. A real interrupted run did resume the next day without re-billing.
 - **Review quality is not measured.** Only the routing of reviewers to another model family is.
 - **Forecasts are rough.** They were off by up to 4.4× before recalibration, and 2.3× on a later
   run, because history is kept per org and not per project size.
-- **Tested by hand on Windows only.** CI covers Linux and macOS.
+- **Hand-tested on Windows only.** The interactive paths (approval prompts, the dashboard, the
+  VS Code extension) were driven by hand on Windows; CI runs the suite on Linux, Windows and
+  macOS × Python 3.12/3.13.
 - **Free tiers change without notice.** Preset limits are dated starting values, corrected at
   run time by each provider's rate-limit headers.
 
@@ -87,7 +102,8 @@ Cadre is one engine (`cadre serve`, a local API at `/api/v1`), and each of these
 of it (ADR-024):
 
 - **AI editors (MCP):** `uvx --from "cadre-ai[mcp]" cadre mcp` gives Claude Code, VS Code, Cursor,
-  Windsurf and Antigravity five tools: forecast, start a run, run status, usage and list orgs.
+  Windsurf and Antigravity six tools: forecast, start a run, run status, usage, list orgs and
+  list memory.
   They can't approve anything. There's a config snippet for each host in
   [`docs/MCP_HOSTS.md`](https://github.com/Daemon-VI/cadre/blob/main/docs/MCP_HOSTS.md).
 - **GitHub Action:** label an issue `cadre` or comment `/cadre <goal>`. Cadre runs
@@ -95,9 +111,14 @@ of it (ADR-024):
   Only the owner, members and collaborators can trigger it. Copy
   [`examples/github-action/cadre.yml`](https://github.com/Daemon-VI/cadre/blob/main/examples/github-action/cadre.yml) and add a free key as a
   repository secret.
-- **VS Code extension** (not published yet; it will go to the Marketplace and Open VSX, so also
-  Antigravity, Cursor and Windsurf): build it from
-  [`editors/vscode`](https://github.com/Daemon-VI/cadre/tree/main/editors/vscode).
+- **VS Code extension:** `ext install daemon-vi.cadre-ai`, or search **Cadre AI** in the
+  Extensions pane. Runs, a live run view, and (since 1.4.0) panels for a new-run form, usage
+  meters, approvals, memory and organisations. Published to the
+  [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=daemon-vi.cadre-ai) and
+  [Open VSX](https://open-vsx.org/extension/daemon-vi/cadre-ai), so it installs in Cursor, Windsurf,
+  Antigravity and VSCodium too. Source: [`editors/vscode`](https://github.com/Daemon-VI/cadre/tree/main/editors/vscode).
+  (It is `cadre-ai`, not `cadre`: the Marketplace requires globally unique names and both `cadre`
+  and the display name `Cadre` were already taken.)
 - **Container:** `ghcr.io/daemon-vi/cadre`, non-root, state in `/data`, keys from environment
   variables. See [`compose.yaml`](compose.yaml).
 - **Standalone downloads** for Windows, macOS and Linux are attached to each GitHub Release. They
@@ -390,6 +411,7 @@ Apache-2.0. See [`LICENSE`](https://github.com/Daemon-VI/cadre/blob/main/LICENSE
 
 ## Documentation
 
+- [`docs/DEMO.md`](https://github.com/Daemon-VI/cadre/blob/main/docs/DEMO.md) — a three-minute walkthrough, with the real output of every command
 - [`docs/SRS.md`](https://github.com/Daemon-VI/cadre/blob/main/docs/SRS.md) — requirements (the refined idea, FR/NFR list)
 - [`docs/ARCHITECTURE.md`](https://github.com/Daemon-VI/cadre/blob/main/docs/ARCHITECTURE.md) — design and decision records
 - [`docs/OBJECTIVES.md`](https://github.com/Daemon-VI/cadre/blob/main/docs/OBJECTIVES.md) — objectives, how each is met, evidence
